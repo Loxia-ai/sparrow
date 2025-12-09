@@ -17,11 +17,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/sparrow.git"
+    "url": "https://github.com/Loxia-ai/sparrow.git"
   },
-  "homepage": "https://github.com/your-org/sparrow#readme",
+  "homepage": "https://github.com/Loxia-ai/sparrow#readme",
   "bugs": {
-    "url": "https://github.com/your-org/sparrow/issues"
+    "url": "https://github.com/Loxia-ai/sparrow/issues"
   },
   "keywords": [
     "static-analysis",

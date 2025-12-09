@@ -24,7 +24,7 @@ npm install sparrow-sast
 Or clone and build from source:
 
 ```bash
-git clone https://github.com/your-org/sparrow.git
+git clone https://github.com/Loxia-ai/sparrow.git
 cd sparrow
 npm install
 npm run build
