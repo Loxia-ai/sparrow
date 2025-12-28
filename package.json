@@ -1,6 +1,6 @@
 {
   "name": "sparrow-sast",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Globstar-compatible static analysis tool for Node.js - A backward-compatible reimplementation of the MIT-licensed Globstar.dev SAST",
   "type": "module",
   "main": "dist/src/index.js",
