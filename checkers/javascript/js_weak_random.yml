@@ -1,0 +1,61 @@
+language: javascript
+name: js_weak_random
+message: "Use crypto.randomBytes() instead of Math.random() for security-sensitive operations"
+category: security
+severity: warning
+
+pattern: |
+  ;; Match Math.random() calls
+  (call_expression
+    function: (member_expression
+      object: (identifier) @obj
+      property: (property_identifier) @method)
+    (#eq? @obj "Math")
+    (#eq? @method "random")) @js_weak_random
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+
+description: |
+  Issue:
+  Math.random() uses a PRNG that is NOT cryptographically secure.
+  Values can be predicted if the internal state is known.
+
+  Impact:
+  - Token prediction
+  - Session hijacking
+  - CSRF bypass
+  - Weak encryption keys
+
+  Vulnerable Example:
+  ```javascript
+  // DANGEROUS - predictable!
+  const token = Math.random().toString(36).substr(2);
+  ```
+
+  Remediation:
+  Use crypto module for security-sensitive operations:
+
+  ```javascript
+  const crypto = require('crypto');
+
+  // Secure random bytes
+  const token = crypto.randomBytes(32).toString('hex');
+
+  // Secure UUID
+  const uuid = crypto.randomUUID();
+
+  // Secure random integer
+  const num = crypto.randomInt(1000);
+
+  // Browser: use Web Crypto API
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  ```
+
+  References:
+  - CWE-330: Use of Insufficiently Random Values
+  - Node.js crypto documentation

@@ -1,0 +1,72 @@
+language: ruby
+name: command_injection
+message: "Use array form of system() to prevent command injection"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match system() with interpolated string
+  (call
+    method: (identifier) @method
+    arguments: (argument_list
+      (interpolation))
+    (#match? @method "^(system|exec|`)$")) @command_injection
+
+  ;; Match backticks with interpolation
+  (subshell
+    (interpolation)) @command_injection
+
+  ;; Match %x{} with interpolation
+  (call
+    method: (identifier) @method
+    arguments: (argument_list
+      (string
+        (interpolation)))
+    (#eq? @method "system")) @command_injection
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/spec/**"
+
+description: |
+  Issue:
+  Using string interpolation in system(), exec(), or backticks allows
+  command injection. Attackers can inject shell metacharacters to
+  execute arbitrary commands.
+
+  Impact:
+  - Remote code execution
+  - System compromise
+  - Data exfiltration
+
+  Vulnerable Example:
+  ```ruby
+  # DANGEROUS - command injection!
+  system("convert #{filename} output.png")
+  # Attack: filename = "img.jpg; rm -rf /"
+  ```
+
+  Remediation:
+  Use array form which bypasses shell:
+
+  ```ruby
+  # Safe - no shell interpolation
+  system('convert', filename, 'output.png')
+
+  # Or use Open3
+  require 'open3'
+  stdout, stderr, status = Open3.capture3('convert', filename, 'output.png')
+  ```
+
+  **Dangerous vs Safe:**
+  | Method | Shell | Safe |
+  |--------|-------|------|
+  | system("cmd #{arg}") | Yes | No |
+  | system('cmd', arg) | No | Yes |
+  | \`cmd #{arg}\` | Yes | No |
+  | Open3.capture3('cmd', arg) | No | Yes |
+
+  References:
+  - CWE-78: OS Command Injection
+  - Ruby on Rails Security Guide

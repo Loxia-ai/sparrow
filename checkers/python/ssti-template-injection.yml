@@ -1,0 +1,90 @@
+language: py
+name: ssti-template-injection
+message: "Avoid rendering user-controlled template strings - use predefined template files instead"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match render_template_string with variable
+  (call
+    function: (identifier) @fn
+    arguments: (argument_list
+      [
+        (identifier)
+        (subscript)
+        (call)
+        (attribute)
+      ])
+    (#eq? @fn "render_template_string")) @ssti-template-injection
+
+  ;; Match Environment.from_string with variable
+  (call
+    function: (attribute
+      object: (identifier) @env
+      attribute: (identifier) @method)
+    arguments: (argument_list
+      [
+        (identifier)
+        (subscript)
+        (call)
+        (attribute)
+      ])
+    (#match? @env "^(env|environment|jinja_env)$")
+    (#eq? @method "from_string")) @ssti-template-injection
+
+  ;; Match Template() constructor with variable in Jinja2/Mako
+  (call
+    function: (identifier) @fn
+    arguments: (argument_list
+      [
+        (identifier)
+        (subscript)
+        (call)
+        (attribute)
+      ])
+    (#eq? @fn "Template")) @ssti-template-injection
+
+exclude:
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/*_test.py"
+  - "**/test_*.py"
+
+description: |
+  Issue:
+  Server-Side Template Injection (SSTI) occurs when user input is embedded
+  in a template string that gets processed by a template engine. This allows
+  attackers to execute arbitrary Python code on the server.
+
+  Impact:
+  - Remote Code Execution (RCE)
+  - Server compromise
+  - Data exfiltration
+  - Complete system takeover
+
+  Vulnerable Example:
+  ```python
+  from flask import render_template_string, request
+
+  @app.route('/render')
+  def render():
+      template = request.args.get('template')
+      return render_template_string(template)  # DANGEROUS!
+      # Attack: {{ config.__class__.__init__.__globals__['os'].popen('id').read() }}
+  ```
+
+  Remediation:
+  Use predefined template files, not user-controlled strings:
+  ```python
+  # Safe: Use render_template with predefined files
+  from flask import render_template
+
+  @app.route('/welcome')
+  def welcome():
+      name = request.args.get('name')
+      return render_template('welcome.html', name=escape(name))
+  ```
+
+  References:
+  - CWE-94: Improper Control of Generation of Code
+  - OWASP SSTI Prevention Cheat Sheet

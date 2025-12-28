@@ -1,0 +1,70 @@
+language: php
+name: unsafe_unserialize
+message: "Use json_decode() instead of unserialize() with untrusted data, or use allowed_classes option"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match unserialize with single argument (no allowed_classes)
+  (function_call_expression
+    function: (name) @fn
+    arguments: (arguments
+      (argument
+        (_)) @data
+      .
+      )
+    (#eq? @fn "unserialize")) @unsafe_unserialize
+
+  ;; Match unserialize with superglobal input
+  (function_call_expression
+    function: (name) @fn
+    arguments: (arguments
+      (argument
+        (subscript_expression
+          (variable_name (name) @var))))
+    (#eq? @fn "unserialize")
+    (#match? @var "^_(GET|POST|REQUEST|COOKIE|SERVER)$")) @unsafe_unserialize
+
+exclude:
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/vendor/**"
+
+description: |
+  Issue:
+  PHP's unserialize() function with untrusted data can lead to object
+  injection attacks. Attackers can craft serialized objects that execute
+  code via magic methods (__wakeup, __destruct).
+
+  Impact:
+  - Remote code execution
+  - File manipulation
+  - SQL injection via object methods
+  - Authentication bypass
+
+  Vulnerable Example:
+  ```php
+  // DANGEROUS: unserialize user input
+  $data = unserialize($_COOKIE['session_data']);
+  ```
+
+  Remediation:
+  1. Use JSON instead of serialize/unserialize
+  2. If unserialize is required, use allowed_classes option
+
+  ```php
+  // Safe: Use JSON
+  $data = json_decode($_COOKIE['data'], true);
+
+  // If unserialize needed, restrict classes
+  $data = unserialize($input, ['allowed_classes' => false]);
+
+  // Or specify exact classes allowed
+  $data = unserialize($input, [
+      'allowed_classes' => ['MyApp\\DTO\\UserDTO']
+  ]);
+  ```
+
+  References:
+  - CWE-502: Deserialization of Untrusted Data
+  - OWASP Deserialization Cheat Sheet

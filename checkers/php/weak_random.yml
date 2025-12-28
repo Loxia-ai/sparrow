@@ -1,0 +1,58 @@
+language: php
+name: weak_random
+message: "Use random_bytes() or random_int() instead of rand()/mt_rand() for security"
+category: security
+severity: warning
+
+pattern: |
+  ;; Match rand() calls
+  (function_call_expression
+    function: (name) @fn
+    (#match? @fn "^(rand|mt_rand|uniqid|lcg_value|srand|mt_srand)$")) @weak_random
+
+  ;; Match array_rand for security context
+  (function_call_expression
+    function: (name) @fn
+    (#eq? @fn "array_rand")) @weak_random
+
+exclude:
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/vendor/**"
+
+description: |
+  Issue:
+  PHP's rand(), mt_rand(), and uniqid() functions are NOT cryptographically
+  secure. Their output can be predicted, making them unsuitable for:
+  - Session IDs
+  - Password reset tokens
+  - CSRF tokens
+  - Encryption keys
+
+  Impact:
+  - Session hijacking
+  - Token prediction
+  - Account takeover
+
+  Vulnerable Example:
+  ```php
+  // DANGEROUS - predictable!
+  $token = md5(mt_rand());
+  $sessionId = uniqid();
+  ```
+
+  Remediation:
+  Use cryptographically secure functions (PHP 7+):
+
+  ```php
+  // Secure random bytes
+  $bytes = random_bytes(32);
+  $token = bin2hex(random_bytes(32));
+
+  // Secure random integer
+  $number = random_int(0, 999999);
+  ```
+
+  References:
+  - CWE-330: Use of Insufficiently Random Values
+  - PHP random_bytes documentation

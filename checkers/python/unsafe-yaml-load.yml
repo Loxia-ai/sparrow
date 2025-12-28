@@ -1,0 +1,72 @@
+language: py
+name: unsafe-yaml-load
+message: "Use yaml.safe_load() instead of yaml.load() or yaml.unsafe_load() to prevent code execution"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match yaml.load() without Loader parameter (vulnerable)
+  (call
+    function: (attribute
+      object: (identifier) @module
+      attribute: (identifier) @method)
+    arguments: (argument_list
+      (_)
+      .
+      )
+    (#eq? @module "yaml")
+    (#eq? @method "load")) @unsafe-yaml-load
+
+  ;; Match yaml.unsafe_load()
+  (call
+    function: (attribute
+      object: (identifier) @module
+      attribute: (identifier) @method)
+    (#eq? @module "yaml")
+    (#eq? @method "unsafe_load")) @unsafe-yaml-load
+
+  ;; Match yaml.full_load()
+  (call
+    function: (attribute
+      object: (identifier) @module
+      attribute: (identifier) @method)
+    (#eq? @module "yaml")
+    (#eq? @method "full_load")) @unsafe-yaml-load
+
+exclude:
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/*_test.py"
+  - "**/test_*.py"
+
+description: |
+  Issue:
+  yaml.load() without a safe Loader allows arbitrary Python code execution
+  through YAML tags like !!python/object. Attackers can execute system commands
+  and completely compromise the server.
+
+  Impact:
+  - Remote Code Execution (RCE)
+  - Server compromise
+  - Data exfiltration
+
+  Vulnerable Example:
+  ```python
+  import yaml
+  data = yaml.load(user_input)  # DANGEROUS!
+  # Attack payload: !!python/object/apply:os.system ["whoami"]
+  ```
+
+  Remediation:
+  Always use yaml.safe_load() which only allows basic YAML types:
+  ```python
+  import yaml
+  data = yaml.safe_load(user_input)  # SAFE
+
+  # Or explicitly specify SafeLoader
+  data = yaml.load(user_input, Loader=yaml.SafeLoader)
+  ```
+
+  References:
+  - CWE-502: Deserialization of Untrusted Data
+  - PyYAML Security Advisory

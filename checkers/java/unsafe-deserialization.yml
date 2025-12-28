@@ -1,0 +1,67 @@
+language: java
+name: unsafe-deserialization
+message: "Use class whitelist filtering when deserializing untrusted data"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match ObjectInputStream.readObject()
+  (method_invocation
+    object: (identifier) @stream
+    name: (identifier) @method
+    (#match? @stream "(ois|ois|objectInputStream|input|stream)")
+    (#eq? @method "readObject")) @unsafe-deserialization
+
+  ;; Match new ObjectInputStream
+  (object_creation_expression
+    type: (type_identifier) @type
+    (#eq? @type "ObjectInputStream")) @unsafe-deserialization
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*Test.java"
+
+description: |
+  Issue:
+  Java's ObjectInputStream.readObject() can instantiate arbitrary classes
+  from serialized data. Attackers can craft malicious payloads using
+  "gadget chains" to achieve Remote Code Execution (RCE).
+
+  Impact:
+  - Remote Code Execution
+  - Server compromise
+  - Data exfiltration
+
+  Vulnerable Example:
+  ```java
+  // DANGEROUS - deserializes any class!
+  ObjectInputStream ois = new ObjectInputStream(input);
+  Object obj = ois.readObject();
+  ```
+
+  Remediation:
+  1. Prefer JSON/XML over Java serialization
+  2. Use class whitelist filtering:
+
+  ```java
+  public class SafeObjectInputStream extends ObjectInputStream {
+      private static final Set<String> ALLOWED = Set.of(
+          "com.myapp.dto.UserDTO",
+          "java.util.ArrayList"
+      );
+
+      @Override
+      protected Class<?> resolveClass(ObjectStreamClass desc)
+              throws IOException, ClassNotFoundException {
+          if (!ALLOWED.contains(desc.getName())) {
+              throw new InvalidClassException("Unauthorized class");
+          }
+          return super.resolveClass(desc);
+      }
+  }
+  ```
+
+  References:
+  - CWE-502: Deserialization of Untrusted Data
+  - OWASP Deserialization Cheat Sheet

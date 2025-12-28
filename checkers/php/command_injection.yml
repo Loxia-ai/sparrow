@@ -1,0 +1,75 @@
+language: php
+name: command_injection
+message: "Avoid passing user input to shell execution functions - use escapeshellarg() and validate input"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match exec/shell_exec/system/passthru with variable
+  (function_call_expression
+    function: (name) @fn
+    arguments: (arguments
+      (argument
+        (variable_name)))
+    (#match? @fn "^(exec|shell_exec|system|passthru|popen|proc_open)$")) @command_injection
+
+  ;; Match with string interpolation
+  (function_call_expression
+    function: (name) @fn
+    arguments: (arguments
+      (argument
+        (encapsed_string)))
+    (#match? @fn "^(exec|shell_exec|system|passthru|popen|proc_open)$")) @command_injection
+
+  ;; Match with concatenation
+  (function_call_expression
+    function: (name) @fn
+    arguments: (arguments
+      (argument
+        (binary_expression)))
+    (#match? @fn "^(exec|shell_exec|system|passthru|popen|proc_open)$")) @command_injection
+
+  ;; Match backtick operator with variable
+  (encapsed_string
+    (variable_name)) @command_injection
+
+exclude:
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/vendor/**"
+
+description: |
+  Issue:
+  PHP shell execution functions (exec, shell_exec, system, passthru, popen,
+  proc_open) with dynamic input allow command injection attacks.
+
+  Impact:
+  - Remote code execution
+  - System compromise
+  - Data exfiltration
+  - Lateral movement
+
+  Vulnerable Example:
+  ```php
+  $dir = $_GET['dir'];
+  exec("ls $dir");  // Attack: ?dir=.; rm -rf /
+  ```
+
+  Remediation:
+  1. Avoid shell functions when possible (use PHP native functions)
+  2. Use escapeshellarg() for arguments
+  3. Validate input against whitelist
+  4. Use full paths to binaries
+
+  ```php
+  // Safe
+  $dir = $_GET['dir'];
+  $allowed = ['/var/data', '/var/logs'];
+  if (in_array($dir, $allowed)) {
+      exec('/bin/ls ' . escapeshellarg($dir), $output);
+  }
+  ```
+
+  References:
+  - CWE-78: OS Command Injection
+  - OWASP Command Injection Prevention

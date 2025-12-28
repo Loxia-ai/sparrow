@@ -1,0 +1,83 @@
+language: php
+name: ldap_injection
+message: "Use ldap_escape() to sanitize user input in LDAP queries"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match ldap_search with string containing variable
+  (function_call_expression
+    function: (name) @fn
+    arguments: (arguments
+      (_)
+      (_)
+      (encapsed_string
+        (variable)))
+    (#match? @fn "^ldap_(search|list|read|compare|add|modify|delete)$")) @ldap_injection
+
+  ;; Match ldap functions with direct superglobal
+  (function_call_expression
+    function: (name) @fn
+    arguments: (arguments
+      (_)
+      (_)
+      (subscript_expression
+        (variable) @var)
+      )
+    (#match? @fn "^ldap_(search|list|read|compare)$")
+    (#match? @var "^\\$_(GET|POST|REQUEST|COOKIE)$")) @ldap_injection
+
+  ;; Match ldap_search with concatenation
+  (function_call_expression
+    function: (name) @fn
+    arguments: (arguments
+      (_)
+      (_)
+      (binary_expression
+        operator: "."
+        right: (variable)))
+    (#match? @fn "^ldap_(search|list|read)$")) @ldap_injection
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/spec/**"
+
+description: |
+  Issue:
+  Using unsanitized user input in LDAP queries enables LDAP injection attacks.
+  Attackers can modify LDAP queries to bypass authentication, access
+  unauthorized data, or extract directory information.
+
+  Impact:
+  - Authentication bypass
+  - Information disclosure
+  - Privilege escalation
+  - Directory enumeration
+
+  Vulnerable Example:
+  ```php
+  // DANGEROUS - LDAP injection!
+  $filter = "(uid={$_POST['username']})";
+  ldap_search($conn, $baseDN, $filter);
+
+  // Attack: username=*)(uid=*
+  // Results in: (uid=*)(uid=*) - returns all users
+  ```
+
+  Remediation:
+  Use ldap_escape() to sanitize user input:
+
+  ```php
+  // Safe - escaped for filter
+  $safeUser = ldap_escape($_POST['username'], "", LDAP_ESCAPE_FILTER);
+  $filter = "(uid={$safeUser})";
+  ldap_search($conn, $baseDN, $filter);
+
+  // Safe - escaped for DN
+  $safeDN = ldap_escape($input, "", LDAP_ESCAPE_DN);
+  ```
+
+  References:
+  - CWE-90: LDAP Injection
+  - OWASP LDAP Injection Prevention

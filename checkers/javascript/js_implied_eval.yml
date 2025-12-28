@@ -1,0 +1,94 @@
+language: javascript
+name: js_implied_eval
+message: "Avoid passing strings to setTimeout/setInterval/Function constructor - use function references instead"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match setTimeout with string variable as first argument
+  (call_expression
+    function: (identifier) @fn
+    arguments: (arguments
+      .
+      [
+        (identifier)
+        (member_expression)
+        (binary_expression)
+        (template_string)
+      ] @string_arg
+      .)
+    (#match? @fn "^(setTimeout|setInterval)$")) @js_implied_eval
+
+  ;; Match window.setTimeout/setInterval with string variable
+  (call_expression
+    function: (member_expression
+      object: (identifier) @window
+      property: (property_identifier) @fn)
+    arguments: (arguments
+      .
+      [
+        (identifier)
+        (member_expression)
+        (binary_expression)
+        (template_string)
+      ] @string_arg
+      .)
+    (#eq? @window "window")
+    (#match? @fn "^(setTimeout|setInterval)$")) @js_implied_eval
+
+  ;; Match new Function() constructor with dynamic input
+  (new_expression
+    constructor: (identifier) @constructor
+    arguments: (arguments
+      [
+        (identifier)
+        (member_expression)
+        (binary_expression)
+        (template_string)
+      ])
+    (#eq? @constructor "Function")) @js_implied_eval
+
+exclude:
+  - "test/**"
+  - "*_test.js"
+  - "tests/**"
+  - "__tests__/**"
+  - "*.test.js"
+  - "*.spec.js"
+
+description: |
+  Issue:
+  When setTimeout(), setInterval(), or the Function constructor receives a string
+  argument, it behaves like eval() and executes the string as JavaScript code.
+  This creates a code injection vulnerability if user input can reach these functions.
+
+  Impact:
+  - Arbitrary code execution on server (Node.js)
+  - Cross-Site Scripting (XSS) in browsers
+  - Complete application compromise
+
+  Vulnerable Examples:
+  ```javascript
+  // Vulnerable: setTimeout with user-controlled string
+  setTimeout(userInput, 1000);  // Executes userInput as code
+
+  // Vulnerable: Function constructor
+  const fn = new Function(userInput);
+  fn();  // Executes arbitrary code
+  ```
+
+  Remediation:
+  Always pass function references, not strings:
+  ```javascript
+  // Safe: Pass a function reference
+  setTimeout(() => console.log('Safe'), 1000);
+
+  // Safe: Named function
+  function myCallback() { /* ... */ }
+  setTimeout(myCallback, 1000);
+
+  // Safe: Parameterized callbacks
+  setTimeout(() => performAction(validatedInput), 1000);
+  ```
+
+  ESLint Rule: no-implied-eval

@@ -1,0 +1,63 @@
+language: dockerfile
+name: run_as_root
+message: "Container runs as root - add USER instruction to run as non-root"
+category: security
+severity: warning
+
+pattern: |
+  ;; Match Dockerfile without USER instruction
+  ;; This is a heuristic - flag CMD/ENTRYPOINT without preceding USER
+  (instruction
+    (cmd_instruction)) @run_as_root
+
+  (instruction
+    (entrypoint_instruction)) @run_as_root
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+
+description: |
+  Issue:
+  Running containers as root is a security risk. If an attacker escapes
+  the container, they have root access to the host system.
+
+  Impact:
+  - Container escape with root privileges
+  - Host filesystem modification
+  - Privilege escalation
+
+  Vulnerable Example:
+  ```dockerfile
+  FROM ubuntu:latest
+  COPY app /app
+  CMD ["/app/run.sh"]  # Runs as root!
+  ```
+
+  Remediation:
+  Add USER instruction to run as non-root:
+
+  ```dockerfile
+  FROM ubuntu:latest
+
+  # Create non-root user
+  RUN groupadd -r appuser && \
+      useradd -r -g appuser appuser
+
+  COPY --chown=appuser:appuser app /app
+
+  # Switch to non-root user
+  USER appuser
+
+  CMD ["/app/run.sh"]
+  ```
+
+  For Alpine:
+  ```dockerfile
+  RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+  USER appuser
+  ```
+
+  References:
+  - CIS Docker Benchmark: 4.1 Create a user for the container
+  - Docker Security Best Practices

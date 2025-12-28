@@ -1,0 +1,103 @@
+language: py
+name: path-traversal
+message: "Validate and sanitize file paths to prevent directory traversal attacks"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match open() with f-string or format containing request data
+  (call
+    function: (identifier) @fn
+    arguments: (argument_list
+      (binary_expression))
+    (#eq? @fn "open")) @path-traversal
+
+  ;; Match open() with variable from request
+  (call
+    function: (identifier) @fn
+    arguments: (argument_list
+      (identifier))
+    (#eq? @fn "open")) @path-traversal
+
+  ;; Match Path operations with variables
+  (call
+    function: (attribute
+      object: (identifier) @module
+      attribute: (identifier) @method)
+    arguments: (argument_list
+      (binary_expression))
+    (#eq? @module "Path")
+    (#match? @method "^(open|read_text|read_bytes|write_text|write_bytes)$")) @path-traversal
+
+  ;; Match os.path.join with user input
+  (call
+    function: (attribute
+      object: (attribute
+        object: (identifier) @os
+        attribute: (identifier) @path)
+      attribute: (identifier) @method)
+    arguments: (argument_list
+      (_)
+      (subscript))
+    (#eq? @os "os")
+    (#eq? @path "path")
+    (#eq? @method "join")) @path-traversal
+
+  ;; Match send_file/send_from_directory with variable
+  (call
+    function: (identifier) @fn
+    arguments: (argument_list
+      (attribute))
+    (#match? @fn "^send_(file|from_directory)$")) @path-traversal
+
+exclude:
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/*_test.py"
+
+description: |
+  Issue:
+  Path traversal (CWE-22) occurs when user input is used in file paths
+  without proper validation. Attackers can use ../ sequences to access
+  files outside the intended directory.
+
+  Impact:
+  - Read sensitive files (/etc/passwd, config files)
+  - Overwrite critical files
+  - Access source code
+  - System compromise
+
+  Vulnerable Example:
+  ```python
+  @app.route('/download/<filename>')
+  def download(filename):
+      return send_file('/uploads/' + filename)  # DANGEROUS!
+  # Attack: /download/../../../etc/passwd
+  ```
+
+  Remediation:
+  1. Use os.path.basename() to remove path components
+  2. Resolve and verify path is within allowed directory
+  3. Use allowlist of permitted files
+
+  ```python
+  from pathlib import Path
+
+  UPLOAD_DIR = Path('/uploads').resolve()
+
+  @app.route('/download/<filename>')
+  def download(filename):
+      # Remove any path components
+      safe_name = Path(filename).name
+      file_path = (UPLOAD_DIR / safe_name).resolve()
+
+      # Verify within allowed directory
+      if not str(file_path).startswith(str(UPLOAD_DIR)):
+          abort(403)
+
+      return send_file(file_path)
+  ```
+
+  References:
+  - CWE-22: Path Traversal
+  - OWASP Path Traversal

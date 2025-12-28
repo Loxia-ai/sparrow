@@ -1,0 +1,55 @@
+language: javascript
+name: js_redos_pattern
+message: "Avoid regex patterns with nested quantifiers - risk of ReDoS"
+category: security
+severity: warning
+
+pattern: |
+  ;; Match regex literals with potentially dangerous patterns
+  ;; Look for patterns like (a+)+ or ([a-z]+)*
+  (regex
+    pattern: (regex_pattern) @pattern
+    (#match? @pattern "\\([^)]*[+*][^)]*\\)[+*]")) @js_redos_pattern
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+
+description: |
+  Issue:
+  Regular expressions with nested quantifiers like (a+)+, ([a-z]+)*, or
+  (.*a){n} can cause catastrophic backtracking. Attackers can craft input
+  that takes exponential time to match, causing denial of service.
+
+  Impact:
+  - CPU exhaustion
+  - Event loop blocking
+  - Service unavailability
+
+  Vulnerable Example:
+  ```javascript
+  // DANGEROUS - exponential backtracking!
+  const email = /^([a-zA-Z0-9]+)+@/;
+  email.test("aaaaaaaaaaaaaaaaaaaaaa!");  // Hangs!
+  ```
+
+  Remediation:
+  1. Avoid nested quantifiers: (a+)+, ([a-z]+)*
+  2. Use RE2 engine for untrusted patterns
+  3. Set timeouts on regex execution
+  4. Use safe-regex npm package to analyze patterns
+
+  ```javascript
+  // Safe pattern - no nested quantifiers
+  const email = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+  // Or use RE2 for user-provided patterns
+  const RE2 = require('re2');
+  const safePattern = new RE2(userPattern);
+  ```
+
+  References:
+  - CWE-1333: ReDoS
+  - OWASP ReDoS Prevention

@@ -1,0 +1,73 @@
+language: go
+name: shell_command_injection
+message: "Avoid using exec.Command with shell interpreters (sh/bash -c) - use separate arguments instead"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match exec.Command("sh", "-c", ...) pattern
+  (call_expression
+    function: (selector_expression
+      operand: (identifier) @pkg
+      field: (field_identifier) @fn)
+    arguments: (argument_list
+      (interpreted_string_literal) @shell_name
+      (interpreted_string_literal) @flag)
+    (#eq? @pkg "exec")
+    (#eq? @fn "Command")
+    (#match? @shell_name "\"(sh|bash|cmd|powershell)\"")
+    (#match? @flag "\"-c\"")) @shell_command_injection
+
+  ;; Match exec.CommandContext("sh", "-c", ...) pattern
+  (call_expression
+    function: (selector_expression
+      operand: (identifier) @pkg
+      field: (field_identifier) @fn)
+    arguments: (argument_list
+      (_)
+      (interpreted_string_literal) @shell_name
+      (interpreted_string_literal) @flag)
+    (#eq? @pkg "exec")
+    (#eq? @fn "CommandContext")
+    (#match? @shell_name "\"(sh|bash|cmd|powershell)\"")
+    (#match? @flag "\"-c\"")) @shell_command_injection
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*_test.go"
+  - "**/testdata/**"
+
+description: |
+  Issue:
+  Using exec.Command with shell interpreters (sh -c or bash -c) and dynamic input
+  allows command injection attacks. Shell metacharacters (;, |, &, $, etc.) can
+  be used to execute arbitrary commands.
+
+  Impact:
+  - Remote Code Execution (RCE)
+  - Server compromise
+  - Data exfiltration
+
+  Vulnerable Example:
+  ```go
+  ip := r.URL.Query().Get("ip")
+  // Attack: ip = "127.0.0.1; rm -rf /"
+  cmd := exec.Command("sh", "-c", "ping -c 4 "+ip)  // DANGEROUS!
+  ```
+
+  Remediation:
+  Use exec.Command with separate arguments:
+  ```go
+  // Safe: No shell interpretation
+  cmd := exec.Command("/usr/bin/ping", "-c", "4", validatedIP)
+
+  // Always validate input
+  if net.ParseIP(ip) == nil {
+      return errors.New("invalid IP")
+  }
+  ```
+
+  References:
+  - CWE-78: OS Command Injection
+  - Go exec package documentation

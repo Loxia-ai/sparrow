@@ -1,0 +1,63 @@
+language: go
+name: sql_injection
+message: "Use parameterized queries instead of string concatenation in SQL"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match fmt.Sprintf with SQL keywords
+  (call_expression
+    function: (selector_expression
+      operand: (identifier) @pkg
+      field: (field_identifier) @fn)
+    arguments: (argument_list
+      (interpreted_string_literal) @query)
+    (#eq? @pkg "fmt")
+    (#eq? @fn "Sprintf")
+    (#match? @query "(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)")) @sql_injection
+
+  ;; Match string concatenation with SQL
+  (binary_expression
+    left: (interpreted_string_literal) @query
+    operator: "+"
+    (#match? @query "(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)")) @sql_injection
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*_test.go"
+
+description: |
+  Issue:
+  Using fmt.Sprintf or string concatenation to build SQL queries allows
+  SQL injection attacks when user input is included.
+
+  Impact:
+  - Data breach
+  - Authentication bypass
+  - Data manipulation/deletion
+  - Full database compromise
+
+  Vulnerable Example:
+  ```go
+  // DANGEROUS - SQL injection!
+  query := fmt.Sprintf("SELECT * FROM users WHERE id = %s", userID)
+  db.Query(query)
+  ```
+
+  Remediation:
+  Use parameterized queries:
+
+  ```go
+  // PostgreSQL - use $1, $2, etc.
+  query := "SELECT * FROM users WHERE id = $1"
+  db.QueryRow(query, userID)
+
+  // MySQL - use ?
+  query := "SELECT * FROM users WHERE id = ?"
+  db.QueryRow(query, userID)
+  ```
+
+  References:
+  - CWE-89: SQL Injection
+  - Go database/sql documentation

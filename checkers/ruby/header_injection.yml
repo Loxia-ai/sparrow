@@ -1,0 +1,79 @@
+language: ruby
+name: header_injection
+message: "Avoid setting HTTP headers with unsanitized user input - enables CRLF injection attacks"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match response.headers[] with string interpolation
+  (element_reference
+    object: (call
+      receiver: (identifier) @resp
+      method: (identifier) @headers)
+    (string
+      (interpolation))
+    (#eq? @resp "response")
+    (#eq? @headers "headers")) @header_injection
+
+  ;; Match response.set_header with variable
+  (call
+    receiver: (identifier) @resp
+    method: (identifier) @method
+    arguments: (argument_list
+      (_)
+      [
+        (identifier)
+        (string (interpolation))
+      ])
+    (#eq? @resp "response")
+    (#eq? @method "set_header")) @header_injection
+
+  ;; Match redirect_to with params
+  (call
+    method: (identifier) @method
+    arguments: (argument_list
+      (call
+        receiver: (identifier) @params))
+    (#eq? @method "redirect_to")
+    (#eq? @params "params")) @header_injection
+
+exclude:
+  - "**/test/**"
+  - "**/spec/**"
+  - "**/*_test.rb"
+  - "**/*_spec.rb"
+
+description: |
+  Issue:
+  Setting HTTP headers with unsanitized user input allows CRLF (Carriage Return
+  Line Feed) injection attacks. Attackers can inject \\r\\n sequences to:
+  - Split HTTP responses
+  - Inject arbitrary headers
+  - Perform session fixation via Set-Cookie injection
+  - Create XSS through response body injection
+
+  Impact:
+  - HTTP Response Splitting
+  - Session Hijacking
+  - Cross-Site Scripting (XSS)
+  - Cache Poisoning
+
+  Vulnerable Example:
+  ```ruby
+  filename = params[:filename]
+  response.headers['Content-Disposition'] = "attachment; filename=#{filename}"
+  # Attack: filename=%0d%0aSet-Cookie:%20evil=true
+  ```
+
+  Remediation:
+  ```ruby
+  # Sanitize by removing CRLF characters
+  safe_filename = filename.to_s.gsub(/[\\r\\n\\x00]/, '')
+
+  # Use Rails helpers that properly encode values
+  send_file path, filename: safe_filename, disposition: 'attachment'
+  ```
+
+  References:
+  - CWE-113: Improper Neutralization of CRLF Sequences in HTTP Headers
+  - OWASP HTTP Response Splitting

@@ -1,0 +1,57 @@
+language: javascript
+name: js_document_write
+message: "Avoid document.write() - it's deprecated and vulnerable to XSS attacks"
+category: security
+severity: warning
+
+pattern: |
+  ;; Match document.write with any argument
+  (call_expression
+    function: (member_expression
+      object: (identifier) @doc
+      property: (property_identifier) @method)
+    (#eq? @doc "document")
+    (#match? @method "^(write|writeln)$")) @js_document_write
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+
+description: |
+  Issue:
+  document.write() and document.writeln() are deprecated methods that can
+  introduce XSS vulnerabilities when used with dynamic content. They also
+  block page parsing and affect performance.
+
+  Impact:
+  - XSS attacks when writing user-controlled content
+  - Page blocking during script execution
+  - Poor performance
+  - Security policy violations (CSP)
+
+  Vulnerable Example:
+  ```javascript
+  const comment = req.body.comment;
+  document.write('<p>' + comment + '</p>');  // XSS!
+  // Attack: comment = "</p><script>alert(1)</script>"
+  ```
+
+  Remediation:
+  Use DOM manipulation methods instead:
+
+  ```javascript
+  // Safe - use createElement and textContent
+  const p = document.createElement('p');
+  p.textContent = comment;  // Auto-escaped
+  document.body.appendChild(p);
+
+  // Or use innerHTML with sanitization
+  import DOMPurify from 'dompurify';
+  element.innerHTML = DOMPurify.sanitize(htmlContent);
+  ```
+
+  References:
+  - MDN: document.write() (Deprecated)
+  - OWASP DOM-based XSS Prevention

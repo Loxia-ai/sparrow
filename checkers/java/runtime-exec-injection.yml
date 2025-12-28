@@ -1,0 +1,81 @@
+language: java
+name: runtime-exec-injection
+message: "Avoid using Runtime.exec() with string concatenation - it enables command injection attacks"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match Runtime.getRuntime().exec() with string concatenation
+  (method_invocation
+    object: (method_invocation
+      object: (identifier) @runtime
+      name: (identifier) @getRuntime)
+    name: (identifier) @exec
+    arguments: (argument_list
+      (binary_expression))
+    (#eq? @runtime "Runtime")
+    (#eq? @getRuntime "getRuntime")
+    (#eq? @exec "exec")) @runtime-exec-injection
+
+  ;; Match runtime.exec() with binary expression (concatenation)
+  (method_invocation
+    object: (identifier) @runtime
+    name: (identifier) @exec
+    arguments: (argument_list
+      (binary_expression))
+    (#match? @runtime "^[rR]untime$")
+    (#eq? @exec "exec")) @runtime-exec-injection
+
+  ;; Match Runtime.getRuntime().exec() with string template
+  (method_invocation
+    object: (method_invocation
+      object: (identifier) @runtime
+      name: (identifier) @getRuntime)
+    name: (identifier) @exec
+    arguments: (argument_list
+      (template_expression))
+    (#eq? @runtime "Runtime")
+    (#eq? @getRuntime "getRuntime")
+    (#eq? @exec "exec")) @runtime-exec-injection
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*Test.java"
+  - "**/*Tests.java"
+
+description: |
+  Issue:
+  Using Runtime.exec() with string concatenation allows command injection attacks.
+  When user input is concatenated into the command string, attackers can inject
+  additional commands using shell metacharacters (;, |, &, $, `, etc.).
+
+  Impact:
+  - Remote Code Execution (RCE)
+  - Complete system compromise
+  - Data theft or destruction
+  - Lateral movement in the network
+
+  Vulnerable Example:
+  ```java
+  String ip = request.getParameter("ip");
+  // Attacker sends: 127.0.0.1; rm -rf /
+  Runtime.getRuntime().exec("ping " + ip);  // Executes both commands!
+  ```
+
+  Remediation:
+  Use ProcessBuilder with separate arguments:
+  ```java
+  // Safe: Arguments are passed as array, not interpreted by shell
+  ProcessBuilder pb = new ProcessBuilder("ping", "-c", "4", validatedIp);
+  Process process = pb.start();
+
+  // Also validate input before use
+  if (!IP_PATTERN.matcher(ip).matches()) {
+      throw new IllegalArgumentException("Invalid IP address");
+  }
+  ```
+
+  References:
+  - CWE-78: Improper Neutralization of Special Elements used in an OS Command
+  - OWASP Command Injection Prevention Cheat Sheet

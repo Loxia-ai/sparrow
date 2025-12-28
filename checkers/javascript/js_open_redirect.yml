@@ -1,0 +1,76 @@
+language: javascript
+name: js_open_redirect
+message: "Avoid redirecting to user-controlled URLs without validation - enables open redirect attacks"
+category: security
+severity: warning
+
+pattern: |
+  ;; Match res.redirect with request parameter
+  (call_expression
+    function: (member_expression
+      object: (identifier) @res
+      property: (property_identifier) @method)
+    arguments: (arguments
+      (member_expression
+        object: (member_expression
+          object: (identifier) @req
+          property: (property_identifier) @query_body)
+        property: (_)))
+    (#match? @res "^(res|response)$")
+    (#eq? @method "redirect")
+    (#match? @req "^(req|request)$")
+    (#match? @query_body "^(query|body|params)$")) @js_open_redirect
+
+  ;; Match res.redirect with req.query.url directly
+  (call_expression
+    function: (member_expression
+      property: (property_identifier) @method)
+    arguments: (arguments
+      (member_expression
+        object: (identifier) @req))
+    (#eq? @method "redirect")
+    (#match? @req "^(req|request)$")) @js_open_redirect
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+
+description: |
+  Issue:
+  Open Redirect vulnerabilities occur when user-controlled input is used
+  directly in redirect functions without validation. Attackers can craft
+  URLs that redirect users to malicious phishing sites.
+
+  Impact:
+  - Phishing attacks using your trusted domain
+  - Credential theft
+  - Malware distribution
+  - OAuth token theft
+
+  Vulnerable Example:
+  ```javascript
+  app.get('/redirect', (req, res) => {
+      res.redirect(req.query.url);  // DANGEROUS!
+  });
+  // Attack: /redirect?url=https://evil.com
+  ```
+
+  Remediation:
+  Validate URLs against an allowlist:
+  ```javascript
+  const ALLOWED_DOMAINS = ['yourdomain.com'];
+
+  app.get('/redirect', (req, res) => {
+      const url = new URL(req.query.url, `${req.protocol}://${req.host}`);
+      if (!ALLOWED_DOMAINS.includes(url.hostname)) {
+          return res.status(400).send('Invalid redirect');
+      }
+      res.redirect(url.href);
+  });
+  ```
+
+  References:
+  - CWE-601: URL Redirection to Untrusted Site
+  - OWASP Unvalidated Redirects and Forwards

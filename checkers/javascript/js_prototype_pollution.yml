@@ -1,0 +1,71 @@
+language: javascript
+name: js_prototype_pollution
+message: "Avoid accessing __proto__ or constructor.prototype with dynamic input - enables prototype pollution attacks"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match direct __proto__ property access
+  (member_expression
+    property: (property_identifier) @prop
+    (#eq? @prop "__proto__")) @js_prototype_pollution
+
+  ;; Match subscript access to __proto__
+  (subscript_expression
+    object: (_)
+    index: (string) @key
+    (#match? @key "__proto__")) @js_prototype_pollution
+
+  ;; Match constructor.prototype access
+  (member_expression
+    object: (member_expression
+      property: (property_identifier) @constructor)
+    property: (property_identifier) @prototype
+    (#eq? @constructor "constructor")
+    (#eq? @prototype "prototype")) @js_prototype_pollution
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+  - "**/node_modules/**"
+
+description: |
+  Issue:
+  Prototype pollution occurs when user-controlled input can modify Object.prototype
+  or other built-in prototypes. This affects ALL objects in the application and
+  can lead to security bypasses, denial of service, or even remote code execution.
+
+  Impact:
+  - Authentication bypass (polluting isAdmin property)
+  - Remote Code Execution (in some frameworks)
+  - Denial of Service
+  - Property injection
+
+  Vulnerable Example:
+  ```javascript
+  // User input with __proto__
+  const input = JSON.parse('{"__proto__": {"isAdmin": true}}');
+  merge({}, input);  // Pollutes Object.prototype
+  console.log({}.isAdmin);  // true for ALL objects!
+  ```
+
+  Remediation:
+  ```javascript
+  // Block dangerous keys
+  const DANGEROUS = ['__proto__', 'constructor', 'prototype'];
+  function isSafeKey(key) {
+      return !DANGEROUS.includes(key);
+  }
+
+  // Use Object.create(null) for dictionaries
+  const dict = Object.create(null);
+
+  // Use Map for user-controlled keys
+  const userMap = new Map();
+  ```
+
+  References:
+  - CWE-1321: Improperly Controlled Modification of Object Prototype Attributes
+  - OWASP Prototype Pollution Prevention

@@ -1,0 +1,61 @@
+language: php
+name: xss_output_encoding
+message: "User input echoed without proper HTML encoding - use htmlspecialchars() to prevent XSS"
+category: security
+severity: high
+
+pattern: |
+  ;; Match echo with direct superglobal subscript
+  (echo_statement
+    (subscript_expression
+      dereferenceable: (variable_name) @superglobal
+      (#match? @superglobal "\\$_(GET|POST|REQUEST|COOKIE|SERVER)")) @xss_direct
+
+  ;; Match print with direct superglobal
+  (expression_statement
+    (print_intrinsic
+      (subscript_expression
+        dereferenceable: (variable_name) @superglobal
+        (#match? @superglobal "\\$_(GET|POST|REQUEST|COOKIE|SERVER)")))) @xss_print
+
+exclude:
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/*Test.php"
+  - "**/vendor/**"
+
+description: |
+  Issue:
+  PHP shell execution functions (exec, shell_exec, system, passthru, popen,
+  proc_open) with dynamic input allow command injection attacks.
+
+  Impact:
+  - Remote code execution
+  - System compromise
+  - Data exfiltration
+  - Lateral movement
+
+  Vulnerable Example:
+  ```php
+  $dir = $_GET['dir'];
+  exec("ls $dir");  // Attack: ?dir=.; rm -rf /
+  ```
+
+  Remediation:
+  1. Avoid shell functions when possible (use PHP native functions)
+  2. Use escapeshellarg() for arguments
+  3. Validate input against whitelist
+  4. Use full paths to binaries
+
+  ```php
+  // Safe
+  $dir = $_GET['dir'];
+  $allowed = ['/var/data', '/var/logs'];
+  if (in_array($dir, $allowed)) {
+      exec('/bin/ls ' . escapeshellarg($dir), $output);
+  }
+  ```
+
+  References:
+  - CWE-78: OS Command Injection
+  - OWASP Command Injection Prevention

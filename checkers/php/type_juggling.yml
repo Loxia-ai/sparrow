@@ -1,0 +1,87 @@
+language: php
+name: type_juggling
+message: "Use strict comparison (===) instead of loose comparison (==) for hash/password checks"
+category: security
+severity: high
+
+pattern: |
+  ;; Match hash function result in loose equality
+  (binary_expression
+    left: (function_call_expression
+      function: (name) @fn
+      (#match? @fn "^(md5|sha1|sha256|hash|hash_hmac|password_hash)$"))
+    operator: "=="
+    right: (_)) @type_juggling
+
+  ;; Match loose equality with hash function on right
+  (binary_expression
+    left: (_)
+    operator: "=="
+    right: (function_call_expression
+      function: (name) @fn
+      (#match? @fn "^(md5|sha1|sha256|hash|hash_hmac)$"))) @type_juggling
+
+  ;; Match variable named *hash* or *password* in loose comparison
+  (binary_expression
+    left: (variable) @var
+    operator: "=="
+    right: (_)
+    (#match? @var "\\$(.*hash|.*password|.*token|.*secret)")) @type_juggling
+
+  ;; Match in_array without strict parameter (only 2 args)
+  (function_call_expression
+    function: (name) @fn
+    arguments: (arguments
+      (_)
+      (_) @second
+      . )
+    (#eq? @fn "in_array")
+    (#not-match? @second "true")) @type_juggling
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/spec/**"
+
+description: |
+  Issue:
+  PHP's loose comparison (==) performs type coercion which can lead to
+  security bypasses. Hashes starting with "0e" are treated as zero in
+  scientific notation, allowing attackers to bypass authentication.
+
+  Impact:
+  - Authentication bypass via "magic hashes"
+  - Token/secret comparison bypass
+  - Array comparison exploits
+
+  Vulnerable Example:
+  ```php
+  // DANGEROUS - Type juggling vulnerability!
+  if (md5($password) == $stored_hash) {
+    // Authenticated
+  }
+
+  // Attack: MD5("240610708") = 0e462097431906509019562988736854
+  // 0e... == 0e... evaluates as 0 == 0 = true
+  ```
+
+  Remediation:
+  Use strict comparison (===) or hash_equals():
+
+  ```php
+  // Safe - strict comparison
+  if (md5($password) === $stored_hash) { }
+
+  // Better - timing-safe comparison
+  if (hash_equals($stored_hash, md5($password))) { }
+
+  // Best - use password_verify for passwords
+  if (password_verify($password, $stored_hash)) { }
+
+  // Safe - in_array with strict mode
+  if (in_array($value, $allowed, true)) { }
+  ```
+
+  References:
+  - CWE-1024: Comparison Using Wrong Factors
+  - OWASP PHP Type Juggling

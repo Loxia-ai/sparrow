@@ -1,0 +1,111 @@
+language: py
+name: os-system-injection
+message: "Avoid using os.system() - it is vulnerable to command injection. Use subprocess with list arguments instead."
+category: security
+severity: critical
+
+pattern: |
+  ;; Match os.system() with any dynamic argument
+  (call
+    function: (attribute
+      object: (identifier) @module
+      attribute: (identifier) @method)
+    arguments: (argument_list
+      [
+        (identifier)
+        (binary_operator)
+        (call)
+        (subscript)
+        (concatenated_string)
+      ])
+    (#eq? @module "os")
+    (#eq? @method "system")) @os-system-injection
+
+  ;; Match os.system() with f-string
+  (call
+    function: (attribute
+      object: (identifier) @module
+      attribute: (identifier) @method)
+    arguments: (argument_list
+      (string
+        (interpolation)))
+    (#eq? @module "os")
+    (#eq? @method "system")) @os-system-injection
+
+  ;; Match os.popen() with dynamic argument
+  (call
+    function: (attribute
+      object: (identifier) @module
+      attribute: (identifier) @method)
+    arguments: (argument_list
+      [
+        (identifier)
+        (binary_operator)
+        (call)
+        (subscript)
+        (concatenated_string)
+      ])
+    (#eq? @module "os")
+    (#eq? @method "popen")) @os-system-injection
+
+  ;; Match os.popen() with f-string
+  (call
+    function: (attribute
+      object: (identifier) @module
+      attribute: (identifier) @method)
+    arguments: (argument_list
+      (string
+        (interpolation)))
+    (#eq? @module "os")
+    (#eq? @method "popen")) @os-system-injection
+
+exclude:
+  - "tests/**"
+  - "test/**"
+  - "*_test.py"
+  - "test_*.py"
+
+description: |
+  Issue:
+  os.system() and os.popen() execute commands through a shell, making them
+  inherently vulnerable to command injection when user input is included.
+  These functions should be avoided entirely in favor of subprocess with
+  proper argument handling.
+
+  Impact:
+  - Remote Code Execution (RCE)
+  - Full system compromise
+  - Data exfiltration
+  - Backdoor installation
+
+  Vulnerable Example:
+  ```python
+  import os
+  filename = request.args.get('file')
+  # Attacker sends: file.txt; cat /etc/passwd
+  os.system(f"cat {filename}")  # Executes malicious command!
+  ```
+
+  Remediation:
+  Use subprocess with list arguments:
+  ```python
+  import subprocess
+
+  # Safe: List of arguments, no shell
+  subprocess.run(['cat', filename])
+
+  # Safe: With proper input validation
+  import re
+  if not re.match(r'^[a-zA-Z0-9._-]+$', filename):
+      raise ValueError("Invalid filename")
+  subprocess.run(['cat', filename])
+  ```
+
+  Never Use:
+  - os.system() - Always uses shell
+  - os.popen() - Always uses shell
+  - commands.getoutput() - Deprecated, uses shell
+
+  References:
+  - CWE-78: OS Command Injection
+  - Python Security Best Practices

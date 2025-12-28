@@ -1,0 +1,75 @@
+language: py
+name: subprocess-shell-true
+message: "Avoid using subprocess with shell=True - it enables command injection attacks"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match subprocess.run with shell=True
+  (call
+    function: (attribute
+      object: (identifier) @module
+      attribute: (identifier) @method)
+    arguments: (argument_list
+      (_)*
+      (keyword_argument
+        name: (identifier) @kwarg
+        value: (true) @shell_value)
+      (_)*)
+    (#eq? @module "subprocess")
+    (#match? @method "^(run|call|Popen|check_output|check_call)$")
+    (#eq? @kwarg "shell")) @subprocess-shell-true
+
+  ;; Match direct subprocess calls with shell=True
+  (call
+    function: (identifier) @method
+    arguments: (argument_list
+      (_)*
+      (keyword_argument
+        name: (identifier) @kwarg
+        value: (true) @shell_value)
+      (_)*)
+    (#match? @method "^(run|call|Popen|check_output|check_call)$")
+    (#eq? @kwarg "shell")) @subprocess-shell-true
+
+exclude:
+  - "tests/**"
+  - "test/**"
+  - "*_test.py"
+  - "test_*.py"
+
+description: |
+  Issue:
+  Using subprocess functions with shell=True passes commands through the system shell,
+  which enables command injection when user input is included in the command string.
+  Attackers can use shell metacharacters (; | & $ ` etc.) to execute arbitrary commands.
+
+  Impact:
+  - Remote Code Execution (RCE)
+  - System compromise
+  - Data theft or destruction
+  - Privilege escalation
+
+  Vulnerable Example:
+  ```python
+  hostname = request.args.get('hostname')
+  # Attacker sends: google.com; rm -rf /
+  subprocess.run(f"ping {hostname}", shell=True)  # Executes both commands!
+  ```
+
+  Remediation:
+  Pass commands as a list and avoid shell=True:
+  ```python
+  # Safe: List of arguments without shell
+  subprocess.run(['ping', '-c', '4', hostname])
+
+  # If you need shell features, validate input strictly:
+  import re
+  if not re.match(r'^[a-zA-Z0-9.-]+$', hostname):
+      raise ValueError("Invalid hostname")
+  subprocess.run(['ping', '-c', '4', hostname])
+  ```
+
+  References:
+  - CWE-78: Improper Neutralization of Special Elements used in an OS Command
+  - OWASP Command Injection

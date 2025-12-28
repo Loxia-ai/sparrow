@@ -1,0 +1,72 @@
+language: rust
+name: shell_command_injection
+message: "Avoid using shell interpreters (sh/bash -c) with dynamic input - use Command::new with separate args instead"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match Command::new("sh").arg("-c") pattern
+  (call_expression
+    function: (scoped_identifier
+      path: (identifier) @cmd_type
+      name: (identifier) @new_fn)
+    arguments: (arguments
+      (string_literal) @shell_name)
+    (#eq? @cmd_type "Command")
+    (#eq? @new_fn "new")
+    (#match? @shell_name "\"(sh|bash|cmd|powershell)\"")) @shell_command_injection
+
+  ;; Match format! or concat with shell command
+  (macro_invocation
+    macro: (identifier) @macro_name
+    (token_tree
+      (string_literal) @format_str)
+    (#eq? @macro_name "format")
+    (#match? @format_str "sh|bash|cmd")) @shell_command_injection
+
+exclude:
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/*_test.rs"
+  - "**/examples/**"
+
+description: |
+  Issue:
+  Using Command::new("sh").arg("-c") or Command::new("bash").arg("-c") with
+  dynamic input allows command injection. When user input is passed through
+  format!() or string concatenation, shell metacharacters can execute arbitrary
+  commands.
+
+  Impact:
+  - Remote Code Execution (RCE)
+  - System compromise
+  - Data theft
+
+  Vulnerable Example:
+  ```rust
+  let host = user_input;
+  Command::new("sh")
+      .arg("-c")
+      .arg(format!("ping -c 4 {}", host))  // VULNERABLE
+      .output()?;
+  // Attack: host = "example.com; rm -rf /"
+  ```
+
+  Remediation:
+  Use Command::new with separate arguments:
+  ```rust
+  // Safe: Arguments passed separately, no shell interpretation
+  Command::new("ping")
+      .arg("-c")
+      .arg("4")
+      .arg(validated_host)  // Treated as literal string
+      .output()?;
+  ```
+
+  Key Difference:
+  - Command::new("sh").arg("-c").arg(user_input) = VULNERABLE
+  - Command::new("ping").arg(user_input) = SAFE
+
+  References:
+  - CWE-78: OS Command Injection
+  - Rust Command documentation

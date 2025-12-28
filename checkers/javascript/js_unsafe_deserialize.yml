@@ -1,0 +1,84 @@
+language: javascript
+name: js_unsafe_deserialize
+message: "Avoid node-serialize, serialize-javascript, and funcster - use JSON.parse instead"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match require('node-serialize')
+  (call_expression
+    function: (identifier) @fn
+    arguments: (arguments
+      (string) @module)
+    (#eq? @fn "require")
+    (#match? @module "^['\"]node-serialize['\"]$")) @js_unsafe_deserialize
+
+  ;; Match serialize.unserialize()
+  (call_expression
+    function: (member_expression
+      property: (property_identifier) @method)
+    (#eq? @method "unserialize")) @js_unsafe_deserialize
+
+  ;; Match require('serialize-javascript')
+  (call_expression
+    function: (identifier) @fn
+    arguments: (arguments
+      (string) @module)
+    (#eq? @fn "require")
+    (#match? @module "^['\"]serialize-javascript['\"]$")) @js_unsafe_deserialize
+
+  ;; Match require('funcster')
+  (call_expression
+    function: (identifier) @fn
+    arguments: (arguments
+      (string) @module)
+    (#eq? @fn "require")
+    (#match? @module "^['\"]funcster['\"]$")) @js_unsafe_deserialize
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+
+description: |
+  Issue:
+  Libraries like node-serialize, serialize-javascript, and funcster can
+  deserialize and execute arbitrary JavaScript code. Attackers can craft
+  payloads that execute system commands when unserialized.
+
+  Impact:
+  - Remote Code Execution (RCE)
+  - Server compromise
+  - Data exfiltration
+
+  Vulnerable Example:
+  ```javascript
+  const serialize = require('node-serialize');
+
+  // DANGEROUS - can execute code!
+  const obj = serialize.unserialize(userInput);
+
+  // Attack payload:
+  // {"rce":"_$$ND_FUNC$$_function(){require('child_process').exec('rm -rf /')}()"}
+  ```
+
+  Remediation:
+  Use JSON.parse which cannot execute code:
+
+  ```javascript
+  // Safe - JSON.parse cannot execute functions
+  const data = JSON.parse(userInput);
+
+  // Add schema validation
+  const Ajv = require('ajv');
+  const ajv = new Ajv();
+  const validate = ajv.compile(schema);
+  if (!validate(data)) {
+    throw new Error('Invalid data');
+  }
+  ```
+
+  References:
+  - CWE-502: Deserialization of Untrusted Data
+  - OWASP Deserialization Cheat Sheet

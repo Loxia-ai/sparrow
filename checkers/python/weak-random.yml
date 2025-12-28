@@ -1,0 +1,63 @@
+language: py
+name: weak-random
+message: "Use secrets module instead of random for security-sensitive operations"
+category: security
+severity: warning
+
+pattern: |
+  ;; Match random.random() calls
+  (call
+    function: (attribute
+      object: (identifier) @module
+      attribute: (identifier) @method)
+    (#eq? @module "random")
+    (#match? @method "^(random|randint|choice|choices|randrange|sample|shuffle)$")) @weak-random
+
+  ;; Match from random import ...
+  (import_from_statement
+    module_name: (dotted_name) @module
+    (#eq? @module "random")) @weak-random
+
+exclude:
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/*_test.py"
+
+description: |
+  Issue:
+  Python's random module uses a Mersenne Twister PRNG which is NOT
+  cryptographically secure. Using it for tokens, passwords, or security
+  functions makes values predictable.
+
+  Impact:
+  - Session token prediction
+  - Password reset token guessing
+  - CSRF token bypass
+  - Encryption key weakness
+
+  Vulnerable Example:
+  ```python
+  import random
+  token = ''.join(random.choices('abc123', k=32))  # PREDICTABLE!
+  ```
+
+  Remediation:
+  Use the secrets module for security-sensitive random values:
+
+  ```python
+  import secrets
+
+  # Secure token generation
+  token = secrets.token_hex(32)
+  token_urlsafe = secrets.token_urlsafe(32)
+
+  # Secure random integer
+  value = secrets.randbelow(1000)
+
+  # Secure choice
+  item = secrets.choice(items)
+  ```
+
+  References:
+  - CWE-330: Use of Insufficiently Random Values
+  - Python secrets module documentation

@@ -1,0 +1,99 @@
+language: javascript
+name: js_command_injection
+message: "Use execFile/spawn instead of exec to prevent command injection"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match exec/execSync with template literal
+  (call_expression
+    function: (identifier) @fn
+    arguments: (arguments
+      (template_string))
+    (#match? @fn "^exec(Sync)?$")) @js_command_injection
+
+  ;; Match exec/execSync from member access with template literal
+  (call_expression
+    function: (member_expression
+      property: (property_identifier) @method)
+    arguments: (arguments
+      (template_string))
+    (#match? @method "^exec(Sync)?$")) @js_command_injection
+
+  ;; Match spawn with shell: true option
+  (call_expression
+    function: (identifier) @fn
+    arguments: (arguments
+      (_)
+      (_)?
+      (object
+        (pair
+          key: (property_identifier) @key
+          value: (true))
+        (#eq? @key "shell")))
+    (#eq? @fn "spawn")) @js_command_injection
+
+  ;; Match spawn from member access with shell: true
+  (call_expression
+    function: (member_expression
+      property: (property_identifier) @method)
+    arguments: (arguments
+      (_)
+      (_)?
+      (object
+        (pair
+          key: (property_identifier) @key
+          value: (true))
+        (#eq? @key "shell")))
+    (#eq? @method "spawn")) @js_command_injection
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+
+description: |
+  Issue:
+  Using child_process.exec() or execSync() with user input enables command
+  injection. The exec functions spawn a shell to interpret the command string,
+  allowing attackers to inject shell metacharacters like ; | & ` $() to execute
+  arbitrary commands.
+
+  Impact:
+  - Remote Code Execution (RCE)
+  - Server compromise
+  - Data theft/destruction
+  - Lateral movement in network
+
+  Vulnerable Example:
+  ```javascript
+  const { exec } = require('child_process');
+
+  // DANGEROUS - shell interprets user input!
+  exec(`ping -c 4 ${userInput}`, callback);
+
+  // Attack: userInput = "8.8.8.8; cat /etc/passwd"
+  ```
+
+  Remediation:
+  Use execFile or spawn without shell:
+
+  ```javascript
+  const { execFile, spawn } = require('child_process');
+
+  // Safe - execFile doesn't use shell
+  execFile('ping', ['-c', '4', userInput], callback);
+
+  // Safe - spawn defaults to shell: false
+  spawn('ping', ['-c', '4', userInput]);
+
+  // Also validate input:
+  if (!/^[\d.]+$/.test(userInput)) {
+    throw new Error('Invalid IP');
+  }
+  ```
+
+  References:
+  - CWE-78: OS Command Injection
+  - OWASP Command Injection

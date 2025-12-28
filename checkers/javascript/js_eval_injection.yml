@@ -1,0 +1,76 @@
+language: javascript
+name: js_eval_injection
+message: "Avoid using eval() with dynamic input as it can lead to code injection vulnerabilities"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match direct eval() calls with any expression (potential injection)
+  (call_expression
+    function: (identifier) @fn
+    arguments: (arguments
+      [
+        (identifier)
+        (member_expression)
+        (binary_expression)
+        (template_string)
+        (call_expression)
+      ])
+    (#eq? @fn "eval")) @js_eval_injection
+
+  ;; Match window.eval() calls
+  (call_expression
+    function: (member_expression
+      object: (identifier) @window
+      property: (property_identifier) @fn)
+    arguments: (arguments
+      [
+        (identifier)
+        (member_expression)
+        (binary_expression)
+        (template_string)
+        (call_expression)
+      ])
+    (#eq? @window "window")
+    (#eq? @fn "eval")) @js_eval_injection
+
+exclude:
+  - "test/**"
+  - "*_test.js"
+  - "tests/**"
+  - "__tests__/**"
+  - "*.test.js"
+  - "*.spec.js"
+
+description: |
+  Issue:
+  Using eval() with dynamic input allows arbitrary JavaScript code execution. An attacker
+  can inject malicious code that runs with the same privileges as your application.
+
+  Impact:
+  - Remote Code Execution (RCE) on the server (Node.js)
+  - Cross-Site Scripting (XSS) in browsers
+  - Data theft, session hijacking, or complete system compromise
+
+  Attack Example:
+  ```javascript
+  // Vulnerable code
+  const userInput = req.query.code;
+  eval(userInput);  // Attacker sends: require('child_process').exec('rm -rf /')
+  ```
+
+  Remediation:
+  - Never use eval() with user-controlled data
+  - Use JSON.parse() for parsing JSON strings
+  - Use safe alternatives like object lookups or switch statements
+  - If dynamic evaluation is absolutely necessary, use a sandboxed environment
+
+  Safe Alternative:
+  ```javascript
+  // Instead of eval() for calculations
+  const SAFE_OPERATIONS = {
+    'add': (a, b) => a + b,
+    'sub': (a, b) => a - b
+  };
+  const result = SAFE_OPERATIONS[operation](a, b);
+  ```

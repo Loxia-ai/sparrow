@@ -1,0 +1,66 @@
+language: javascript
+name: js_postmessage_origin
+message: "Avoid using '*' as targetOrigin in postMessage - specify exact origin"
+category: security
+severity: warning
+
+pattern: |
+  ;; Match postMessage with '*' as targetOrigin
+  (call_expression
+    function: (member_expression
+      property: (property_identifier) @method)
+    arguments: (arguments
+      (_)
+      (string) @origin)
+    (#eq? @method "postMessage")
+    (#match? @origin "^['\"]\\*['\"]$")) @js_postmessage_origin
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+
+description: |
+  Issue:
+  Using '*' as the targetOrigin in postMessage allows any window to receive
+  the message, potentially exposing sensitive data to malicious sites.
+
+  Impact:
+  - Sensitive data leakage to untrusted origins
+  - Token/credential theft
+  - Cross-site attacks
+
+  Vulnerable Example:
+  ```javascript
+  iframe.contentWindow.postMessage(
+    { token: secretToken },
+    '*'  // DANGEROUS: Any origin can receive!
+  );
+  ```
+
+  Remediation:
+  Always specify the exact target origin:
+
+  ```javascript
+  const TRUSTED_ORIGIN = 'https://trusted.example.com';
+
+  iframe.contentWindow.postMessage(
+    { token: secretToken },
+    TRUSTED_ORIGIN  // Only this origin receives
+  );
+  ```
+
+  Also validate origin when receiving messages:
+  ```javascript
+  window.addEventListener('message', (event) => {
+    if (event.origin !== TRUSTED_ORIGIN) {
+      return;  // Reject untrusted origins
+    }
+    // Process message...
+  });
+  ```
+
+  References:
+  - MDN: Window.postMessage()
+  - OWASP postMessage Security

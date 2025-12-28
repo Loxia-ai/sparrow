@@ -1,0 +1,89 @@
+language: javascript
+name: js_innerhtml_xss
+message: "Avoid assigning dynamic content to innerHTML - use textContent or proper sanitization to prevent XSS"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match innerHTML assignment with variable
+  (assignment_expression
+    left: (member_expression
+      property: (property_identifier) @prop)
+    right: [
+      (identifier)
+      (member_expression)
+      (binary_expression)
+      (template_string)
+      (call_expression)
+    ]
+    (#eq? @prop "innerHTML")) @js_innerhtml_xss
+
+  ;; Match innerHTML compound assignment (+=)
+  (augmented_assignment_expression
+    left: (member_expression
+      property: (property_identifier) @prop)
+    right: [
+      (identifier)
+      (member_expression)
+      (binary_expression)
+      (template_string)
+      (call_expression)
+    ]
+    (#eq? @prop "innerHTML")) @js_innerhtml_xss
+
+  ;; Match outerHTML assignment with variable
+  (assignment_expression
+    left: (member_expression
+      property: (property_identifier) @prop)
+    right: [
+      (identifier)
+      (member_expression)
+      (binary_expression)
+      (template_string)
+      (call_expression)
+    ]
+    (#eq? @prop "outerHTML")) @js_innerhtml_xss
+
+exclude:
+  - "test/**"
+  - "*_test.js"
+  - "tests/**"
+  - "__tests__/**"
+  - "*.test.js"
+  - "*.spec.js"
+
+description: |
+  Issue:
+  Assigning user-controlled content to innerHTML or outerHTML parses the content
+  as HTML, which can execute embedded JavaScript through script tags or event handlers.
+  This leads to Cross-Site Scripting (XSS) vulnerabilities.
+
+  Impact:
+  - Session hijacking through cookie theft
+  - Credential theft via fake login forms
+  - Malware distribution
+  - Defacement and phishing attacks
+
+  Vulnerable Example:
+  ```javascript
+  // Attacker input: <img src=x onerror="alert(document.cookie)">
+  element.innerHTML = userInput;  // XSS!
+  ```
+
+  Remediation:
+  ```javascript
+  // Safe: Use textContent for plain text
+  element.textContent = userInput;
+
+  // Safe: Use DOM methods
+  const p = document.createElement('p');
+  p.textContent = userInput;
+  container.appendChild(p);
+
+  // If HTML is required, sanitize with DOMPurify
+  element.innerHTML = DOMPurify.sanitize(userInput);
+  ```
+
+  References:
+  - OWASP XSS Prevention Cheat Sheet
+  - CWE-79: Improper Neutralization of Input During Web Page Generation

@@ -1,0 +1,77 @@
+language: go
+name: path_traversal
+message: "Validate file paths to prevent directory traversal attacks"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match os.ReadFile/os.Open with variable path
+  (call_expression
+    function: (selector_expression
+      operand: (identifier) @pkg
+      field: (field_identifier) @fn)
+    arguments: (argument_list
+      (identifier))
+    (#eq? @pkg "os")
+    (#match? @fn "^(ReadFile|Open|Create|OpenFile)$")) @path_traversal
+
+  ;; Match http.ServeFile with request parameter
+  (call_expression
+    function: (selector_expression
+      operand: (identifier) @pkg
+      field: (field_identifier) @fn)
+    (#eq? @pkg "http")
+    (#eq? @fn "ServeFile")) @path_traversal
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*_test.go"
+
+description: |
+  Issue:
+  File operations with user-controlled paths can allow attackers to
+  read/write files outside the intended directory using "../" sequences.
+
+  Impact:
+  - Read sensitive files (/etc/passwd, config files)
+  - Overwrite critical files
+  - Information disclosure
+
+  Vulnerable Example:
+  ```go
+  // DANGEROUS - no path validation!
+  func download(w http.ResponseWriter, r *http.Request) {
+      filename := r.URL.Query().Get("file")
+      data, _ := os.ReadFile(uploadDir + "/" + filename)
+      // Attack: ?file=../../../etc/passwd
+  }
+  ```
+
+  Remediation:
+  Validate paths stay within allowed directory:
+
+  ```go
+  func secureDownload(w http.ResponseWriter, r *http.Request) {
+      filename := r.URL.Query().Get("file")
+
+      // Clean and join paths
+      cleanPath := filepath.Clean(filename)
+      fullPath := filepath.Join(uploadDir, cleanPath)
+
+      // Verify within allowed directory
+      absUpload, _ := filepath.Abs(uploadDir)
+      absFile, _ := filepath.Abs(fullPath)
+
+      if !strings.HasPrefix(absFile, absUpload) {
+          http.Error(w, "Forbidden", 403)
+          return
+      }
+
+      http.ServeFile(w, r, fullPath)
+  }
+  ```
+
+  References:
+  - CWE-22: Path Traversal
+  - Go filepath package documentation

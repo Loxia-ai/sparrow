@@ -1,0 +1,68 @@
+language: ruby
+name: sql_injection
+message: "Use parameterized queries instead of string interpolation in ActiveRecord"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match where with string interpolation
+  (call
+    method: (identifier) @method
+    arguments: (argument_list
+      (string
+        (interpolation)))
+    (#match? @method "^(where|find_by_sql|select|order|group|having|joins|from)$")) @sql_injection
+
+  ;; Match execute with interpolation
+  (call
+    method: (identifier) @method
+    arguments: (argument_list
+      (string
+        (interpolation)))
+    (#eq? @method "execute")) @sql_injection
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/spec/**"
+
+description: |
+  Issue:
+  Using string interpolation in ActiveRecord queries allows SQL injection.
+  User input can manipulate the query to bypass authentication, extract
+  data, or modify/delete records.
+
+  Impact:
+  - Authentication bypass
+  - Data breach
+  - Data manipulation/deletion
+  - Full database compromise
+
+  Vulnerable Example:
+  ```ruby
+  # DANGEROUS - SQL injection!
+  User.where("username = '#{params[:username]}'")
+
+  # Attack: params[:username] = "' OR '1'='1"
+  ```
+
+  Remediation:
+  Use parameterized queries:
+
+  ```ruby
+  # Safe - hash conditions
+  User.where(username: params[:username])
+
+  # Safe - ? placeholder
+  User.where('username = ?', params[:username])
+
+  # Safe - named placeholder
+  User.where('username = :name', name: params[:username])
+
+  # Safe - find_by
+  User.find_by(username: params[:username])
+  ```
+
+  References:
+  - CWE-89: SQL Injection
+  - Rails Security Guide - SQL Injection

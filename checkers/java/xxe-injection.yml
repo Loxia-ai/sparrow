@@ -1,0 +1,77 @@
+language: java
+name: xxe-injection
+message: "Disable external entities in XML parsers to prevent XXE attacks"
+category: security
+severity: critical
+
+pattern: |
+  ;; Match DocumentBuilderFactory without secure configuration
+  (method_invocation
+    object: (identifier) @factory
+    name: (identifier) @method
+    arguments: (argument_list
+      (string_literal)))
+  (#match? @factory "DocumentBuilderFactory|SAXParserFactory|XMLInputFactory")
+  (#eq? @method "newInstance") @xxe-injection
+
+  ;; Match XMLReader creation
+  (method_invocation
+    name: (identifier) @method
+    (#eq? @method "createXMLReader")) @xxe-injection
+
+  ;; Match Unmarshaller without secure settings
+  (method_invocation
+    object: (identifier) @ctx
+    name: (identifier) @method
+    (#match? @ctx "JAXBContext|jaxbContext")
+    (#eq? @method "createUnmarshaller")) @xxe-injection
+
+  ;; Match TransformerFactory
+  (method_invocation
+    object: (identifier) @factory
+    name: (identifier) @method
+    (#eq? @factory "TransformerFactory")
+    (#eq? @method "newInstance")) @xxe-injection
+
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*Test.java"
+
+description: |
+  Issue:
+  XML External Entity (XXE) injection (CWE-611) occurs when XML parsers
+  process external entity references in untrusted XML input. Attackers
+  can read files, perform SSRF, or cause denial of service.
+
+  Impact:
+  - Read local files (/etc/passwd)
+  - SSRF to internal services
+  - Denial of service (Billion Laughs)
+  - Data exfiltration
+
+  Vulnerable Example:
+  ```java
+  DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+  DocumentBuilder db = dbf.newDocumentBuilder();
+  Document doc = db.parse(userInput);  // XXE VULNERABLE!
+  ```
+
+  Remediation:
+  Disable external entities and DTDs:
+
+  ```java
+  DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+  dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+  dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
+  dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+  dbf.setXIncludeAware(false);
+  dbf.setExpandEntityReferences(false);
+
+  DocumentBuilder db = dbf.newDocumentBuilder();
+  Document doc = db.parse(userInput);  // Now safe
+  ```
+
+  References:
+  - CWE-611: XXE
+  - OWASP XXE Prevention Cheat Sheet
